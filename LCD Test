@@ -1,0 +1,82 @@
+#include <wiringPi.h>
+#include <wiringPiI2C.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#define LCD_ADDR 0x27   
+#define LCD_BACKLIGHT 0x08
+#define ENABLE 0x04
+
+void lcd_toggle_enable(int fd, int bits) {
+    delayMicroseconds(600);
+    wiringPiI2CWrite(fd, bits | ENABLE);
+    delayMicroseconds(600);
+    wiringPiI2CWrite(fd, bits & ~ENABLE);
+    delayMicroseconds(600);
+}
+
+void lcd_write_cmd(int fd, unsigned char cmd) {
+    int highNibble = cmd & 0xF0;
+    int lowNibble  = (cmd << 4) & 0xF0;
+
+    wiringPiI2CWrite(fd, highNibble | LCD_BACKLIGHT);
+    lcd_toggle_enable(fd, highNibble | LCD_BACKLIGHT);
+
+    wiringPiI2CWrite(fd, lowNibble | LCD_BACKLIGHT);
+    lcd_toggle_enable(fd, lowNibble | LCD_BACKLIGHT);
+}
+
+void lcd_write_char(int fd, unsigned char data) {
+    int highNibble = data & 0xF0;
+    int lowNibble  = (data << 4) & 0xF0;
+
+    wiringPiI2CWrite(fd, highNibble | 0x01 | LCD_BACKLIGHT);
+    lcd_toggle_enable(fd, highNibble | 0x01 | LCD_BACKLIGHT);
+
+    wiringPiI2CWrite(fd, lowNibble | 0x01 | LCD_BACKLIGHT);
+    lcd_toggle_enable(fd, lowNibble | 0x01 | LCD_BACKLIGHT);
+}
+
+void lcd_init(int fd) {
+    lcd_write_cmd(fd, 0x33);
+    lcd_write_cmd(fd, 0x32);
+    lcd_write_cmd(fd, 0x28);
+    lcd_write_cmd(fd, 0x0C);
+    lcd_write_cmd(fd, 0x06);
+    lcd_write_cmd(fd, 0x01);
+    delay(5);
+}
+
+void lcd_set_cursor(int fd, int row, int col) {
+    int row_offsets[] = {0x80, 0xC0};
+    lcd_write_cmd(fd, row_offsets[row] + col);
+}
+
+void lcd_print(int fd, const char *text) {
+    while (*text) {
+        lcd_write_char(fd, *text++);
+    }
+}
+
+int main() {
+    printf("LCD1602 Test starting...\n");
+
+    int fd = wiringPiI2CSetup(LCD_ADDR);
+    if (fd < 0) {
+        printf("Failed to init I2C device.\n");
+        return -1;
+    }
+
+    lcd_init(fd);
+
+    lcd_set_cursor(fd, 0, 0);
+    lcd_print(fd, "LDC Test!");
+
+    lcd_set_cursor(fd, 1, 0);
+    lcd_print(fd, "It's working!");
+
+    printf("Look at the LCD!\n");
+
+    return 0;
+}
