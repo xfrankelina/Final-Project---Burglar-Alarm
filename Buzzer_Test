@@ -1,0 +1,64 @@
+
+#include <stdio.h>
+#include <wiringPi.h>
+#include <softTone.h>
+
+#define ACTIVE_BUZZER_PIN 26   
+#define PASSIVE_BUZZER_PIN 12  
+
+void testActiveBuzzer() {
+    printf("Testing ACTIVE buzzer on GPIO26...\n");
+    pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
+
+    for (int i = 0; i < 3; i++) {
+        digitalWrite(ACTIVE_BUZZER_PIN, HIGH);
+        delay(200);
+        digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+        delay(200);
+    }
+    printf("Active buzzer test done.\n");
+}
+
+void testPassiveBuzzer() {
+    printf("Testing PASSIVE buzzer (siren) on GPIO12...\n");
+
+    if (softToneCreate(PASSIVE_BUZZER_PIN) != 0) {
+        printf("softToneCreate failed on GPIO12\n");
+        return;
+    }
+
+    
+for (int r = 0; r < 3; r++) 
+{           
+        for (int freq = 500; freq <= 2000; freq += 20) {
+            softToneWrite(PASSIVE_BUZZER_PIN, freq);
+            delay(5);
+        }
+        for (int freq = 2000; freq >= 500; freq -= 20) {
+            softToneWrite(PASSIVE_BUZZER_PIN, freq);
+            delay(5);
+        }
+}
+
+    softToneWrite(PASSIVE_BUZZER_PIN, 0);  
+    printf("Passive buzzer test done.\n");
+}
+
+int main(void) {
+    if (wiringPiSetupGpio() == -1) {
+        printf("wiringPiSetupGpio failed.\n");
+        return 1;
+    }
+
+    testActiveBuzzer();
+    delay(500);
+    testPassiveBuzzer();
+
+ 
+    pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
+    digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+    softToneWrite(PASSIVE_BUZZER_PIN, 0);
+
+    printf("Buzzer tests complete.\n");
+    return 0;
+}
