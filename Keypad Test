@@ -1,0 +1,71 @@
+#include <wiringPi.h>
+#include <stdio.h>
+
+#define NUM_ROWS 4
+#define NUM_COLS 4
+
+int rowPins[NUM_ROWS] = {25, 24, 23, 18};
+int colPins[NUM_COLS] = {5, 17, 22, 10};
+
+char keymap[NUM_ROWS][NUM_COLS] = {
+    {'D', '#', '0', '*'},
+    {'C', '9', '8', '7'},
+    {'B', '6', '5', '4'},
+    {'A', '3', '2', '1'}
+};
+
+
+char getKey(void) {
+    int r, c;
+
+    for (c = 0; c < NUM_COLS; c++) {
+        for (int k = 0; k < NUM_COLS; k++) {
+            digitalWrite(colPins[k], HIGH);
+        }
+        digitalWrite(colPins[c], LOW);
+
+        delayMicroseconds(50);
+
+        for (r = 0; r < NUM_ROWS; r++) {
+            if (digitalRead(rowPins[r]) == LOW) {
+                while (digitalRead(rowPins[r]) == LOW) {
+                    delay(10);
+                }
+                return keymap[r][c];
+            }
+        }
+    }
+
+    return 0;
+}
+
+int main(void) {
+    int r, c;
+
+    if (wiringPiSetupGpio() == -1) {
+        printf("Failed to init wiringPi\n");
+        return 1;
+    }
+
+    for (r = 0; r < NUM_ROWS; r++) {
+        pinMode(rowPins[r], INPUT);
+        pullUpDnControl(rowPins[r], PUD_UP);
+    }
+
+    for (c = 0; c < NUM_COLS; c++) {
+        pinMode(colPins[c], OUTPUT);
+        digitalWrite(colPins[c], HIGH);
+    }
+
+    printf("Keypad test started...\n");
+
+    while (1) {
+        char k = getKey();
+        if (k != 0) {
+            printf("Pressed: %c\n", k);
+        }
+        delay(50);
+    }
+
+    return 0;
+}
