@@ -6,3 +6,52 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+// I2C Addresses and GPIO Pins
+#define LCD_ADDR   0x27
+#define ADC_ADDR   0x4B
+
+#define PIR_PIN            27
+#define ACTIVE_BUZZER_PIN  26
+#define PASSIVE_BUZZER_PIN 12
+
+//Keypad rows, columns, and Map
+#define NUM_ROWS 4
+#define NUM_COLS 4
+int rowPins[NUM_ROWS] = {25, 24, 23, 18};
+int colPins[NUM_COLS] = {5, 17, 22, 10};
+
+char keymap[NUM_ROWS][NUM_COLS] = {
+    {'D', '#', '0', '*'},
+    {'C', '9', '8', '7'},
+    {'B', '6', '5', '4'},
+    {'A', '3', '2', '1'}
+};
+
+//Parameters
+#define PIN_CODE           "1295"  
+#define PIN_MAX_LEN        4
+#define TEMP_SAMPLE_CH     0       
+#define TEMP_BASE_SAMPLES  20
+#define TEMP_DELTA_THRESH  15       
+#define TRIGGER_COUNTDOWN  10 
+
+//LCD Control bits
+#define LCD_BACKLIGHT 0x08
+#define ENABLE        0x04
+
+int lcdFd  = -1;
+int adcFd  = -1;
+
+// System State
+typedef enum {
+    STATE_DISARMED = 0,
+    STATE_ARM_PIN_ENTRY,
+    STATE_ARMED,
+    STATE_TRIGGER_COUNTDOWN,
+    STATE_ALARM
+} SystemState;
+
+
+
+
