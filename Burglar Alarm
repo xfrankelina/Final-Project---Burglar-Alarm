@@ -76,4 +76,151 @@ void sendNotification(const char *reason) {
     }
 }
 
+// LCD help functions
+
+void lcd_toggle_enable(int bits) {
+    delayMicroseconds(600);
+    wiringPiI2CWrite(lcdFd, bits | ENABLE);
+    delayMicroseconds(600);
+    wiringPiI2CWrite(lcdFd, bits & ~ENABLE);
+    delayMicroseconds(600);
+}
+
+void lcd_write_cmd(unsigned char cmd) {
+    int highNibble = cmd & 0xF0;
+    int lowNibble  = (cmd << 4) & 0xF0;
+
+    wiringPiI2CWrite(lcdFd, highNibble | LCD_BACKLIGHT);
+    lcd_toggle_enable(highNibble | LCD_BACKLIGHT);
+
+    wiringPiI2CWrite(lcdFd, lowNibble | LCD_BACKLIGHT);
+    lcd_toggle_enable(lowNibble | LCD_BACKLIGHT);
+}
+
+void lcd_write_char(unsigned char data) {
+    int highNibble = data & 0xF0;
+    int lowNibble  = (data << 4) & 0xF0;
+
+    wiringPiI2CWrite(lcdFd, highNibble | 0x01 | LCD_BACKLIGHT);
+    lcd_toggle_enable(highNibble | 0x01 | LCD_BACKLIGHT);
+
+    wiringPiI2CWrite(lcdFd, lowNibble | 0x01 | LCD_BACKLIGHT);
+    lcd_toggle_enable(lowNibble | 0x01 | LCD_BACKLIGHT);
+}
+
+void lcd_init() {
+    lcd_write_cmd(0x33);
+    lcd_write_cmd(0x32);
+    lcd_write_cmd(0x28);
+    lcd_write_cmd(0x0C);
+    lcd_write_cmd(0x06);
+    lcd_write_cmd(0x01);
+    delay(5);
+}
+
+void lcd_clear() {
+    lcd_write_cmd(0x01);
+    delay(2);
+}
+
+void lcd_set_cursor(int row, int col) {
+    int row_offsets[] = {0x80, 0xC0};
+    lcd_write_cmd(row_offsets[row] + col);
+}
+
+void lcd_print(const char *text) {
+    while (*text) {
+        lcd_write_char(*text++);
+    }
+}
+
+void lcd_show_status(const char *line1, const char *line2) {
+    lcd_clear();
+    lcd_set_cursor(0, 0);
+    lcd_print(line1);
+    lcd_set_cursor(1, 0);
+    lcd_print(line2);
+
+// ADS7830 helper
+
+int ads7830_read_raw(int channel) {
+    if (channel < 0 || channel > 7) channel = 0;
+    int cmd = 0x84 | (channel << 4); // single-ended, ch select
+    wiringPiI2CWrite(adcFd, cmd);
+    delayMicroseconds(10);
+    int value = wiringPiI2CRead(adcFd);
+    return value & 0xFF; // 0-255
+}
+
+int temp_get_sample() {
+    return ads7830_read_raw(TEMP_SAMPLE_CH);
+
+//Keypad Scan
+char keypad_get_key() {
+    int r, c;
+
+    for (c = 0; c < 4; c++) {
+    
+        for (int k = 0; k < 4; k++) {
+            digitalWrite(colPins[k], HIGH);
+        }
+       
+        digitalWrite(colPins[c], LOW);
+        delayMicroseconds(50);
+
+     
+        for (r = 0; r < 4; r++) {
+            if (digitalRead(rowPins[r]) == LOW) {
+                while (digitalRead(rowPins[r]) == LOW) {
+                    delay(10);
+                }
+                return keymap[r][c];
+            }
+        }
+    }
+    return 0;
+}
+
+void keypad_init() {
+    for (int r = 0; r < 4; r++) {
+        pinMode(rowPins[r], INPUT);
+        pullUpDnControl(rowPins[r], PUD_UP);
+    }
+
+    for (int c = 0; c < 4; c++) {
+        pinMode(colPins[c], OUTPUT);
+        digitalWrite(colPins[c], HIGH);
+    }
+}
+
+// Buzzers
+
+void buzz_active_beep(int ms) {
+    digitalWrite(ACTIVE_BUZZER_PIN, HIGH);
+    delay(ms);
+    digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+}
+
+void buzz_passive_siren(int duration_ms) {
+    int elapsed = 0;
+    while (elapsed < duration_ms) {
+        for (int f = 800; f <= 2200; f += 50) {
+            softToneWrite(PASSIVE_BUZZER_PIN, f);
+            delay(5);
+            elapsed += 5;
+            if (elapsed >= duration_ms) break;
+        }
+        for (int f = 2200; f >= 800; f -= 50) {
+            softToneWrite(PASSIVE_BUZZER_PIN, f);
+            delay(5);
+            elapsed += 5;
+            if (elapsed >= duration_ms) break;
+        }
+    }
+    softToneWrite(PASSIVE_BUZZER_PIN, 0);
+}
+
+void buzz_short_feedback() {
+    buzz_active_beep(80);
+}
 
