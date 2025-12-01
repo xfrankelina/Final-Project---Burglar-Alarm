@@ -224,3 +224,100 @@ void buzz_short_feedback() {
     buzz_active_beep(80);
 }
 
+//Pin Handling
+void pin_buffer_clear(char *buf) {
+    buf[0] = '\0';
+}
+
+void pin_buffer_append(char *buf, char digit) {
+    size_t len = strlen(buf);
+    if (len < PIN_MAX_LEN) {
+        buf[len] = digit;
+        buf[len+1] = '\0';
+    }
+}
+
+int pin_buffer_check(const char *buf) {
+    return strcmp(buf, PIN_CODE) == 0;
+}
+
+//Main Code
+int main(void) {
+    printf("Burglar alarm starting...\n");
+
+    if (wiringPiSetupGpio() == -1) {
+        printf("wiringPiSetupGpio failed.\n");
+        return 1;
+    }
+
+
+    lcdFd = wiringPiI2CSetup(LCD_ADDR);
+    if (lcdFd < 0) {
+        printf("Failed to init LCD at 0x%02X\n", LCD_ADDR);
+        return 1;
+    }
+    adcFd = wiringPiI2CSetup(ADC_ADDR);
+    if (adcFd < 0) {
+        printf("Failed to init ADC at 0x%02X\n", ADC_ADDR);
+        return 1;
+    }
+
+    lcd_init();
+
+ pinMode(PIR_PIN, INPUT);
+    pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
+    digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+
+    if (softToneCreate(PASSIVE_BUZZER_PIN) != 0) {
+        printf("softToneCreate failed on GPIO%d\n", PASSIVE_BUZZER_PIN);
+        return 1;
+    }
+    softToneWrite(PASSIVE_BUZZER_PIN, 0);
+
+    keypad_init();
+
+ int base = 0;
+    for (int i = 0; i < TEMP_BASE_SAMPLES; i++) {
+        base += temp_get_sample();
+        delay(50);
+    }
+    base /= TEMP_BASE_SAMPLES;
+    printf("Baseline temp raw: %d\n", base);
+
+    SystemState state = STATE_DISARMED;
+    char pinBuf[PIN_MAX_LEN + 1];
+    pin_buffer_clear(pinBuf);
+
+    int countdown = 0;
+    int lastPIR = LOW;
+
+    lcd_show_status("DISARMED", "Press A to arm");
+
+    while (1) {
+        char key = keypad_get_key();
+
+//Arm override
+if (key == 'C') {
+            state = STATE_DISARMED;
+            pin_buffer_clear(pinBuf);
+            lcd_show_status("DISARMED", "Press A to arm");
+            softToneWrite(PASSIVE_BUZZER_PIN, 0);
+            digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+            printf("System disarmed via C key.\n");
+        }
+
+        switch (state) {
+            case STATE_DISARMED:
+                if (key == 'A') {
+                    lcd_show_status("Enter PIN to", "ARM (then #)");
+                    pin_buffer_clear(pinBuf);
+                    state = STATE_ARM_PIN_ENTRY;
+                    buzz_short_feedback();
+                }
+                break;
+                
+case STATE_ARM_PIN_ENTRY:
+                if (key >= '0' && key <= '9') {
+                    pin_buffer_append(pinBuf, key);
+                    buzz_short_feedback();
+
