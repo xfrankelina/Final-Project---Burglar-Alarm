@@ -321,3 +321,103 @@ case STATE_ARM_PIN_ENTRY:
                     pin_buffer_append(pinBuf, key);
                     buzz_short_feedback();
 
+                    lcd_set_cursor(1, 0);
+                    lcd_print("PIN: ");
+                    for (size_t i = 0; i < strlen(pinBuf); i++) {
+                        lcd_print("*");
+                    }
+                } else if (key == '*') {
+                    pin_buffer_clear(pinBuf);
+                    lcd_show_status("Enter PIN to", "ARM (then #)");
+                } else if (key == '#') {
+                    if (pin_buffer_check(pinBuf)) {
+                        state = STATE_ARMED;
+                        lcd_show_status("ARMED", "Monitoring...");
+                        buzz_active_beep(200);
+                        printf("System ARMED.\n");
+                    } else {
+                        lcd_show_status("Wrong PIN!", "Try again.");
+                        buzz_active_beep(400);
+                        pin_buffer_clear(pinBuf);
+                        state = STATE_DISARMED;
+                        delay(800);
+                        lcd_show_status("DISARMED", "Press A to arm");
+                    }
+                }
+                break;
+
+            case STATE_ARMED: {
+                int pirVal = digitalRead(PIR_PIN);
+                int tempRaw = temp_get_sample();
+                int delta = abs(tempRaw - base);
+ static unsigned long lastUpdate = 0;
+                unsigned long now = millis();
+                if (now - lastUpdate > 1000) {
+                    char buf[17];
+                    snprintf(buf, sizeof(buf), "PIR:%d dT:%3d", pirVal, delta);
+                    lcd_set_cursor(1, 0);
+                    lcd_print("                ");
+                    lcd_set_cursor(1, 0);
+                    lcd_print(buf);
+                    lastUpdate = now;
+                }
+
+                if (pirVal == HIGH && lastPIR == LOW) {
+                    printf("PIR trigger!\n");
+                }
+                lastPIR = pirVal;
+
+                if (pirVal == HIGH || delta > TEMP_DELTA_THRESH) {
+                    state = STATE_TRIGGER_COUNTDOWN;
+                    countdown = TRIGGER_COUNTDOWN;
+                    lcd_show_status("INTRUSION!", "Enter PIN to stop");
+                    printf("Trigger detected. Countdown started.\n");
+                }
+                break;
+            }
+
+            case STATE_TRIGGER_COUNTDOWN: {
+                static unsigned long lastTick = 0;
+                unsigned long now = millis();
+
+// Beeps every second and updates countdown
+if (now - lastTick >= 1000) {
+                    lastTick = now;
+                    char buf[17];
+                    snprintf(buf, sizeof(buf), "Alarm in %2d s", countdown);
+                    lcd_set_cursor(1, 0);
+                    lcd_print("                ");
+                    lcd_set_cursor(1, 0);
+                    lcd_print(buf);
+                    buzz_active_beep(100);
+                    countdown--;
+                    if (countdown < 0) countdown = 0;
+                }
+
+                if (key >= '0' && key <= '9') {
+                    pin_buffer_append(pinBuf, key);
+                    buzz_short_feedback();
+                } else if (key == '*') {
+                    pin_buffer_clear(pinBuf);
+                } else if (key == '#') {
+                    if (pin_buffer_check(pinBuf)) {
+                        state = STATE_DISARMED;
+                        lcd_show_status("DISARMED", "Press A to arm");
+                        buzz_active_beep(300);
+                        pin_buffer_clear(pinBuf);
+                        printf("Disarmed during countdown.\n");
+                    } else {
+                        lcd_show_status("Wrong PIN!", "Alarm continues");
+                        buzz_active_beep(500);
+                        pin_buffer_clear(pinBuf);
+                    }
+                }
+
+                if (countdown <= 0 && state == STATE_TRIGGER_COUNTDOWN) {
+                    state = STATE_ALARM;
+                    lcd_show_status("ALARM ACTIVE!", "Enter PIN");
+                    sendNotification("Timeout reached after trigger");
+                    printf("Alarm ACTIVE.\n");
+                }
+                break;
+            }
