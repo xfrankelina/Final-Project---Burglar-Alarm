@@ -421,3 +421,37 @@ if (now - lastTick >= 1000) {
                 }
                 break;
             }
+ case STATE_ALARM:
+                // Continuous siren with pauses to check keypad
+                buzz_passive_siren(500);
+                buzz_active_beep(200);
+
+                if (key >= '0' && key <= '9') {
+                    pin_buffer_append(pinBuf, key);
+                    buzz_short_feedback();
+                } else if (key == '*') {
+                    pin_buffer_clear(pinBuf);
+                } else if (key == '#') {
+                    if (pin_buffer_check(pinBuf)) {
+                        lcd_show_status("DISARMED", "Press A to arm");
+                        buzz_active_beep(400);
+                        softToneWrite(PASSIVE_BUZZER_PIN, 0);
+                        digitalWrite(ACTIVE_BUZZER_PIN, LOW);
+                        pin_buffer_clear(pinBuf);
+                        state = STATE_DISARMED;
+                        printf("Alarm cleared with correct PIN.\n");
+                    } else {
+                        lcd_show_status("Wrong PIN!", "Alarm stays ON");
+                        buzz_active_beep(600);
+                        pin_buffer_clear(pinBuf);
+                    }
+                }
+                break;
+        }
+
+        delay(50); // small delay to avoid high CPU usage
+    }
+
+    return 0;
+}
+
