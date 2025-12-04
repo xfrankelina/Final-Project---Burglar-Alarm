@@ -29,12 +29,12 @@ char keymap[NUM_ROWS][NUM_COLS] = {
 };
 
 //Parameters
-#define PIN_CODE           "1295"  
+#define PIN_CODE           "1295"
 #define PIN_MAX_LEN        4
-#define TEMP_SAMPLE_CH     0       
+#define TEMP_SAMPLE_CH     0
 #define TEMP_BASE_SAMPLES  20
-#define TEMP_DELTA_THRESH  15       
-#define TRIGGER_COUNTDOWN  10 
+#define TEMP_DELTA_THRESH  15
+#define TRIGGER_COUNTDOWN  10
 
 //LCD Control bits
 #define LCD_BACKLIGHT 0x08
@@ -53,7 +53,6 @@ typedef enum {
 } SystemState;
 
 // Timestamp and 911 email simulation
-
 void getTimestamp(char *buf, size_t len) {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
@@ -133,42 +132,44 @@ void lcd_print(const char *text) {
         lcd_write_char(*text++);
     }
 }
-
 void lcd_show_status(const char *line1, const char *line2) {
     lcd_clear();
     lcd_set_cursor(0, 0);
     lcd_print(line1);
     lcd_set_cursor(1, 0);
     lcd_print(line2);
+}
 
 // ADS7830 helper
 
 int ads7830_read_raw(int channel) {
     if (channel < 0 || channel > 7) channel = 0;
-    int cmd = 0x84 | (channel << 4); // single-ended, ch select
+    int cmd = 0x84 | (channel << 4);
     wiringPiI2CWrite(adcFd, cmd);
     delayMicroseconds(10);
-    int value = wiringPiI2CRead(adcFd);
-    return value & 0xFF; // 0-255
+    {
+        int value = wiringPiI2CRead(adcFd);
+        return value & 0xFF;
+    }
 }
 
 int temp_get_sample() {
     return ads7830_read_raw(TEMP_SAMPLE_CH);
+}
 
 //Keypad Scan
 char keypad_get_key() {
-    int r, c;
+    int r, c, k;
 
     for (c = 0; c < 4; c++) {
-    
-        for (int k = 0; k < 4; k++) {
+
+        for (k = 0; k < 4; k++) {
             digitalWrite(colPins[k], HIGH);
         }
-       
+
         digitalWrite(colPins[c], LOW);
         delayMicroseconds(50);
 
-     
         for (r = 0; r < 4; r++) {
             if (digitalRead(rowPins[r]) == LOW) {
                 while (digitalRead(rowPins[r]) == LOW) {
@@ -182,12 +183,14 @@ char keypad_get_key() {
 }
 
 void keypad_init() {
-    for (int r = 0; r < 4; r++) {
+    int r, c;
+
+    for (r = 0; r < 4; r++) {
         pinMode(rowPins[r], INPUT);
         pullUpDnControl(rowPins[r], PUD_UP);
     }
 
-    for (int c = 0; c < 4; c++) {
+    for (c = 0; c < 4; c++) {
         pinMode(colPins[c], OUTPUT);
         digitalWrite(colPins[c], HIGH);
     }
@@ -203,14 +206,16 @@ void buzz_active_beep(int ms) {
 
 void buzz_passive_siren(int duration_ms) {
     int elapsed = 0;
+    int f;
+
     while (elapsed < duration_ms) {
-        for (int f = 800; f <= 2200; f += 50) {
+        for (f = 800; f <= 2200; f += 50) {
             softToneWrite(PASSIVE_BUZZER_PIN, f);
             delay(5);
             elapsed += 5;
             if (elapsed >= duration_ms) break;
         }
-        for (int f = 2200; f >= 800; f -= 50) {
+        for (f = 2200; f >= 800; f -= 50) {
             softToneWrite(PASSIVE_BUZZER_PIN, f);
             delay(5);
             elapsed += 5;
@@ -219,7 +224,6 @@ void buzz_passive_siren(int duration_ms) {
     }
     softToneWrite(PASSIVE_BUZZER_PIN, 0);
 }
-
 void buzz_short_feedback() {
     buzz_active_beep(80);
 }
@@ -233,7 +237,7 @@ void pin_buffer_append(char *buf, char digit) {
     size_t len = strlen(buf);
     if (len < PIN_MAX_LEN) {
         buf[len] = digit;
-        buf[len+1] = '\0';
+        buf[len + 1] = '\0';
     }
 }
 
@@ -243,13 +247,19 @@ int pin_buffer_check(const char *buf) {
 
 //Main Code
 int main(void) {
+    int base = 0;
+    int i;
+    SystemState state;
+    char pinBuf[PIN_MAX_LEN + 1];
+    int countdown = 0;
+    int lastPIR = LOW;
+
     printf("Burglar alarm starting...\n");
 
     if (wiringPiSetupGpio() == -1) {
         printf("wiringPiSetupGpio failed.\n");
         return 1;
     }
-
 
     lcdFd = wiringPiI2CSetup(LCD_ADDR);
     if (lcdFd < 0) {
@@ -264,7 +274,7 @@ int main(void) {
 
     lcd_init();
 
- pinMode(PIR_PIN, INPUT);
+    pinMode(PIR_PIN, INPUT);
     pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
     digitalWrite(ACTIVE_BUZZER_PIN, LOW);
 
@@ -276,28 +286,23 @@ int main(void) {
 
     keypad_init();
 
- int base = 0;
-    for (int i = 0; i < TEMP_BASE_SAMPLES; i++) {
+    for (i = 0; i < TEMP_BASE_SAMPLES; i++) {
         base += temp_get_sample();
         delay(50);
     }
     base /= TEMP_BASE_SAMPLES;
     printf("Baseline temp raw: %d\n", base);
 
-    SystemState state = STATE_DISARMED;
-    char pinBuf[PIN_MAX_LEN + 1];
+    state = STATE_DISARMED;
     pin_buffer_clear(pinBuf);
-
-    int countdown = 0;
-    int lastPIR = LOW;
 
     lcd_show_status("DISARMED", "Press A to arm");
 
     while (1) {
         char key = keypad_get_key();
 
-//Arm override
-if (key == 'C') {
+        //Arm override
+        if (key == 'C') {
             state = STATE_DISARMED;
             pin_buffer_clear(pinBuf);
             lcd_show_status("DISARMED", "Press A to arm");
@@ -305,8 +310,7 @@ if (key == 'C') {
             digitalWrite(ACTIVE_BUZZER_PIN, LOW);
             printf("System disarmed via C key.\n");
         }
-
-        switch (state) {
+     switch (state) {
             case STATE_DISARMED:
                 if (key == 'A') {
                     lcd_show_status("Enter PIN to", "ARM (then #)");
@@ -315,15 +319,17 @@ if (key == 'C') {
                     buzz_short_feedback();
                 }
                 break;
-                
-case STATE_ARM_PIN_ENTRY:
+
+            case STATE_ARM_PIN_ENTRY:
                 if (key >= '0' && key <= '9') {
+                    size_t j;
+
                     pin_buffer_append(pinBuf, key);
                     buzz_short_feedback();
 
                     lcd_set_cursor(1, 0);
                     lcd_print("PIN: ");
-                    for (size_t i = 0; i < strlen(pinBuf); i++) {
+                    for (j = 0; j < strlen(pinBuf); j++) {
                         lcd_print("*");
                     }
                 } else if (key == '*') {
@@ -346,14 +352,15 @@ case STATE_ARM_PIN_ENTRY:
                 }
                 break;
 
-            case STATE_ARMED: {
+     case STATE_ARMED: {
                 int pirVal = digitalRead(PIR_PIN);
                 int tempRaw = temp_get_sample();
                 int delta = abs(tempRaw - base);
- static unsigned long lastUpdate = 0;
+                static unsigned long lastUpdate = 0;
                 unsigned long now = millis();
+                char buf[17];
+
                 if (now - lastUpdate > 1000) {
-                    char buf[17];
                     snprintf(buf, sizeof(buf), "PIR:%d dT:%3d", pirVal, delta);
                     lcd_set_cursor(1, 0);
                     lcd_print("                ");
@@ -379,11 +386,11 @@ case STATE_ARM_PIN_ENTRY:
             case STATE_TRIGGER_COUNTDOWN: {
                 static unsigned long lastTick = 0;
                 unsigned long now = millis();
+                char buf[17];
 
-// Beeps every second and updates countdown
-if (now - lastTick >= 1000) {
+                // Beeps every second and updates countdown
+                if (now - lastTick >= 1000) {
                     lastTick = now;
-                    char buf[17];
                     snprintf(buf, sizeof(buf), "Alarm in %2d s", countdown);
                     lcd_set_cursor(1, 0);
                     lcd_print("                ");
@@ -393,8 +400,7 @@ if (now - lastTick >= 1000) {
                     countdown--;
                     if (countdown < 0) countdown = 0;
                 }
-
-                if (key >= '0' && key <= '9') {
+  if (key >= '0' && key <= '9') {
                     pin_buffer_append(pinBuf, key);
                     buzz_short_feedback();
                 } else if (key == '*') {
@@ -421,7 +427,8 @@ if (now - lastTick >= 1000) {
                 }
                 break;
             }
- case STATE_ALARM:
+
+            case STATE_ALARM:
                 // Continuous siren with pauses to check keypad
                 buzz_passive_siren(500);
                 buzz_active_beep(200);
@@ -454,4 +461,3 @@ if (now - lastTick >= 1000) {
 
     return 0;
 }
-
