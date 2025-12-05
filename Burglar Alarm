@@ -132,6 +132,7 @@ void lcd_print(const char *text) {
         lcd_write_char(*text++);
     }
 }
+
 void lcd_show_status(const char *line1, const char *line2) {
     lcd_clear();
     lcd_set_cursor(0, 0);
@@ -224,6 +225,7 @@ void buzz_passive_siren(int duration_ms) {
     }
     softToneWrite(PASSIVE_BUZZER_PIN, 0);
 }
+
 void buzz_short_feedback() {
     buzz_active_beep(80);
 }
@@ -273,7 +275,7 @@ int main(void) {
     }
 
     lcd_init();
-
+    
     pinMode(PIR_PIN, INPUT);
     pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
     digitalWrite(ACTIVE_BUZZER_PIN, LOW);
@@ -310,7 +312,8 @@ int main(void) {
             digitalWrite(ACTIVE_BUZZER_PIN, LOW);
             printf("System disarmed via C key.\n");
         }
-     switch (state) {
+
+        switch (state) {
             case STATE_DISARMED:
                 if (key == 'A') {
                     lcd_show_status("Enter PIN to", "ARM (then #)");
@@ -332,7 +335,7 @@ int main(void) {
                     for (j = 0; j < strlen(pinBuf); j++) {
                         lcd_print("*");
                     }
-                } else if (key == '*') {
+                     } else if (key == '*') {
                     pin_buffer_clear(pinBuf);
                     lcd_show_status("Enter PIN to", "ARM (then #)");
                 } else if (key == '#') {
@@ -352,7 +355,7 @@ int main(void) {
                 }
                 break;
 
-     case STATE_ARMED: {
+            case STATE_ARMED: {
                 int pirVal = digitalRead(PIR_PIN);
                 int tempRaw = temp_get_sample();
                 int delta = abs(tempRaw - base);
@@ -377,6 +380,7 @@ int main(void) {
                 if (pirVal == HIGH || delta > TEMP_DELTA_THRESH) {
                     state = STATE_TRIGGER_COUNTDOWN;
                     countdown = TRIGGER_COUNTDOWN;
+                    pin_buffer_clear(pinBuf);   // clear PIN on trigger
                     lcd_show_status("INTRUSION!", "Enter PIN to stop");
                     printf("Trigger detected. Countdown started.\n");
                 }
@@ -400,7 +404,8 @@ int main(void) {
                     countdown--;
                     if (countdown < 0) countdown = 0;
                 }
-  if (key >= '0' && key <= '9') {
+                
+                 if (key >= '0' && key <= '9') {
                     pin_buffer_append(pinBuf, key);
                     buzz_short_feedback();
                 } else if (key == '*') {
@@ -421,6 +426,7 @@ int main(void) {
 
                 if (countdown <= 0 && state == STATE_TRIGGER_COUNTDOWN) {
                     state = STATE_ALARM;
+                    pin_buffer_clear(pinBuf);   // clear PIN on full alarm
                     lcd_show_status("ALARM ACTIVE!", "Enter PIN");
                     sendNotification("Timeout reached after trigger");
                     printf("Alarm ACTIVE.\n");
@@ -429,9 +435,9 @@ int main(void) {
             }
 
             case STATE_ALARM:
-                // Continuous siren with pauses to check keypad
-                buzz_passive_siren(500);
-                buzz_active_beep(200);
+                // Continuous siren with short bursts so keypad stays responsive
+                buzz_passive_siren(100);
+                buzz_active_beep(50);
 
                 if (key >= '0' && key <= '9') {
                     pin_buffer_append(pinBuf, key);
